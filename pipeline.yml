@@ -1,0 +1,18 @@
+data:
+  usd_uah: "data/usd_uah_daily.csv"
+  cpi:      "data/cpi_monthly.csv"
+
+experiment:
+  horizons: [1, 24, 168, 365]         # h
+  cv_folds: rolling                   # rolling-origin
+  metrics: [rmse, mase, smape, dm]
+
+models:
+  naive:
+    lang: [python, r, julia]
+  seasonal_naive:
+    lang: [python, r, julia]
+  ets:
+    lang: [python, r, julia]
+  auto_arima:
+    lang: [python, r, julia]

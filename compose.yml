@@ -1,0 +1,15 @@
+services:
+  py:
+    build: ./docker/python
+    volumes: ["./:/work"]
+  r:
+    build: ./docker/r
+    volumes: ["./:/work"]
+  jl:
+    build: ./docker/julia
+    volumes: ["./:/work"]
+  lab:
+    image: jupyter/base-notebook:python-3.12
+    volumes: ["./:/home/jovyan/work"]
+    ports: ["8888:8888"]
+    command: "start-notebook.sh --NotebookApp.token=''"
