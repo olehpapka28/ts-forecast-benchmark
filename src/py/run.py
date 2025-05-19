@@ -7,125 +7,118 @@ from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from pmdarima import auto_arima
 import os
 
-# ========== Конфігурація ==========
-DATA_PATH = Path("data/usd_uah_daily.csv")
-RESULTS_DIR = Path("results")
-RESULTS_DIR.mkdir(exist_ok=True)
-OUTPUT_PATH = RESULTS_DIR / "py_naive_usd.csv"
-TEST_HORIZON = 365
-SEASONALITY = 365
+def run_model(name, data_path, output_path, horizon, seasonal_periods, value_column, seasonal):
+    df = pd.read_csv(data_path, parse_dates=["date"])
+    df = df.sort_values("date").reset_index(drop=True)
+    df["value"] = pd.to_numeric(df[value_column], errors="coerce")
+    df = df.dropna()
 
-# ========== Завантаження та підготовка ==========
-df = pd.read_csv(DATA_PATH, parse_dates=["date"], dayfirst=True)
-df = df.sort_values("date").reset_index(drop=True)
-df["rate"] = pd.to_numeric(df["rate"], errors="coerce")
-df = df.dropna()
+    RESULTS_DIR = Path("results")
+    RESULTS_DIR.mkdir(exist_ok=True)
 
-train = df[:-TEST_HORIZON].copy()
-test = df[-TEST_HORIZON:].copy()
+    train = df[:-horizon].copy()
+    test = df[-horizon:].copy()
 
-results = []
+    results = []
 
-# ========== Naïve ==========
-last_value = train["rate"].iloc[-1]
-test["naive"] = last_value
+    # ========== Naïve ==========
+    last_value = train["value"].iloc[-1]
+    test["naive"] = last_value
+    y_true = test["value"].values
+    y_pred = test["naive"].values
 
-y_true = test["rate"].values
-y_pred = test["naive"].values
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mase = np.mean(np.abs(y_true - y_pred)) / np.mean(np.abs(np.diff(train["value"])))
+    smape = 100 * np.mean(2 * np.abs(y_true - y_pred) / (np.abs(y_true) + np.abs(y_pred)))
+    results.append({
+        "model": "naive", "rmse": rmse, "mase": mase, "smape": smape,
+        "horizon": horizon, "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    print(f"✅ [{name}] Naïve завершено")
 
-rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-mase = np.mean(np.abs(y_true - y_pred)) / np.mean(np.abs(np.diff(train["rate"])))
-smape = 100 * np.mean(2 * np.abs(y_true - y_pred) / (np.abs(y_true) + np.abs(y_pred)))
+    # ========== Seasonal Naïve ==========
+    test["seasonal_naive"] = df["value"].shift(seasonal_periods).iloc[-horizon:].values
+    y_pred = test["seasonal_naive"].values
 
-results.append({
-    "model": "naive",
-    "rmse": round(rmse, 4),
-    "mase": round(mase, 4),
-    "smape": round(smape, 2),
-    "horizon": TEST_HORIZON,
-    "timestamp": datetime.now(timezone.utc).isoformat()
-})
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mase = np.mean(np.abs(y_true - y_pred)) / np.mean(np.abs(np.diff(train["value"])))
+    smape = 100 * np.mean(2 * np.abs(y_true - y_pred) / (np.abs(y_true) + np.abs(y_pred)))
+    results.append({
+        "model": "seasonal_naive", "rmse": rmse, "mase": mase, "smape": smape,
+        "horizon": horizon, "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    print(f"✅ [{name}] Seasonal Naïve завершено")
 
-print("✅ Naïve модель завершено")
+    # ========== ETS ==========
+    ets_model = ExponentialSmoothing(
+        train["value"],
+        trend="add",
+        seasonal="add" if seasonal else None,
+        seasonal_periods=seasonal_periods if seasonal else None,
+        initialization_method="estimated"
+    ).fit()
 
-# ========== Seasonal Naïve ==========
-test["seasonal_naive"] = df["rate"].shift(SEASONALITY).iloc[-TEST_HORIZON:].values
-y_pred = test["seasonal_naive"].values
+    forecast = ets_model.forecast(steps=horizon)
+    y_pred = forecast.values
 
-rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-mase = np.mean(np.abs(y_true - y_pred)) / np.mean(np.abs(np.diff(train["rate"])))
-smape = 100 * np.mean(2 * np.abs(y_true - y_pred) / (np.abs(y_true) + np.abs(y_pred)))
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mase = np.mean(np.abs(y_true - y_pred)) / np.mean(np.abs(np.diff(train["value"])))
+    smape = 100 * np.mean(2 * np.abs(y_true - y_pred) / (np.abs(y_true) + np.abs(y_pred)))
+    results.append({
+        "model": "ets_add_add", "rmse": rmse, "mase": mase, "smape": smape,
+        "horizon": horizon, "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    print(f"✅ [{name}] ETS завершено")
 
-results.append({
-    "model": "seasonal_naive",
-    "rmse": round(rmse, 4),
-    "mase": round(mase, 4),
-    "smape": round(smape, 2),
-    "horizon": TEST_HORIZON,
-    "timestamp": datetime.now(timezone.utc).isoformat()
-})
+    # ========== Auto-ARIMA ==========
+    arima_model = auto_arima(
+        train["value"],
+        seasonal=seasonal,
+        m=seasonal_periods if seasonal else 1,
+        stepwise=True,
+        suppress_warnings=True,
+        error_action='ignore'
+    )
 
-print("✅ Seasonal Naïve модель завершено")
+    forecast = arima_model.predict(n_periods=horizon)
+    y_pred = forecast
 
-# ========== ETS (Exponential Smoothing) ==========
-ets_model = ExponentialSmoothing(
-    train["rate"],
-    trend="add",
-    seasonal="add",
-    seasonal_periods=SEASONALITY,
-    initialization_method="estimated"
-).fit()
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mase = np.mean(np.abs(y_true - y_pred)) / np.mean(np.abs(np.diff(train["value"])))
+    smape = 100 * np.mean(2 * np.abs(y_true - y_pred) / (np.abs(y_true) + np.abs(y_pred)))
+    results.append({
+        "model": "auto_arima", "rmse": rmse, "mase": mase, "smape": smape,
+        "horizon": horizon, "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    print(f"✅ [{name}] Auto-ARIMA завершено")
 
-forecast = ets_model.forecast(steps=TEST_HORIZON)
-test["ets"] = forecast.values
+    # ========== Save ==========
+    pd.DataFrame(results).to_csv(output_path, index=False)
+    print(f"📄 [{name}] Результати збережено у {output_path}")
 
-y_pred = forecast.values
 
-rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-mase = np.mean(np.abs(y_true - y_pred)) / np.mean(np.abs(np.diff(train["rate"])))
-smape = 100 * np.mean(2 * np.abs(y_true - y_pred) / (np.abs(y_true) + np.abs(y_pred)))
+def run_usd_uah():
+    run_model(
+        name="usd_uah",
+        data_path="data/usd_uah_daily.csv",
+        output_path="results/py_naive_usd.csv",
+        horizon=365,
+        seasonal_periods=1,        # вимикаємо сезонність
+        value_column="rate",
+        seasonal=False
+    )
 
-results.append({
-    "model": "ets_add_add",
-    "rmse": round(rmse, 4),
-    "mase": round(mase, 4),
-    "smape": round(smape, 2),
-    "horizon": TEST_HORIZON,
-    "timestamp": datetime.now(timezone.utc).isoformat()
-})
+def run_cpi():
+    run_model(
+        name="cpi",
+        data_path="data/cpi_monthly.csv",
+        output_path="results/py_naive_cpi.csv",
+        horizon=12,
+        seasonal_periods=12,
+        value_column="value",
+        seasonal=True
+    )
 
-print("✅ ETS модель завершено")
-
-# ========== Auto-ARIMA ==========
-arima_model = auto_arima(
-    train["rate"],
-    seasonal=False,
-    stepwise=True,
-    suppress_warnings=True,
-    error_action='ignore'
-)
-
-forecast = arima_model.predict(n_periods=TEST_HORIZON)
-test["arima"] = forecast
-
-y_pred = forecast
-
-rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-mase = np.mean(np.abs(y_true - y_pred)) / np.mean(np.abs(np.diff(train["rate"])))
-smape = 100 * np.mean(2 * np.abs(y_true - y_pred) / (np.abs(y_true) + np.abs(y_pred)))
-
-results.append({
-    "model": "auto_arima",
-    "rmse": round(rmse, 4),
-    "mase": round(mase, 4),
-    "smape": round(smape, 2),
-    "horizon": TEST_HORIZON,
-    "timestamp": datetime.now(timezone.utc).isoformat()
-})
-
-print("✅ Auto-ARIMA модель завершено")
-
-# ==========  ЗАПИС  ==========
-out = pd.DataFrame(results)
-out.to_csv(OUTPUT_PATH, index=False)
-print(f"📄 Результати збережено у {OUTPUT_PATH}")
+if __name__ == "__main__":
+    run_usd_uah()
+    run_cpi()
