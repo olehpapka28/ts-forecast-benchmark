@@ -1,10 +1,11 @@
 data:
   usd_uah: "data/usd_uah_daily.csv"
-  cpi:      "data/cpi_monthly.csv"
+  cpi:     "data/cpi_monthly.csv"
+  brent:   "data/brent.csv"
 
 experiment:
-  horizons: [1, 24, 168, 365]         # h
-  cv_folds: rolling                   # rolling-origin
+  horizons: [1, 24, 168, 365]
+  cv_folds: rolling
   metrics: [rmse, mase, smape, dm]
 
 models:

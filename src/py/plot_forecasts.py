@@ -1,8 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import re
 from pathlib import Path
 
-def plot_forecast(data_path, result_path, title, date_col="date", value_col="value"):
+def plot_forecast(data_path, result_path, title, value_col="value", date_col="date"):
     df = pd.read_csv(data_path, parse_dates=[date_col])
     results = pd.read_csv(result_path)
 
@@ -13,13 +14,12 @@ def plot_forecast(data_path, result_path, title, date_col="date", value_col="val
     horizon = int(results["horizon"].iloc[0])
     test = df[-horizon:].copy()
 
-    # Підготуємо прогнози
+    # Підготовка прогнозів
     forecast_df = pd.DataFrame({date_col: test[date_col]})
     for model in results["model"]:
-        # Очікуємо файл з назвою виду: forecast_{модель}_{ряд}.csv
-        path = Path(f"results/forecast_{model}_{result_path.stem.split('_')[-1]}.csv")
-        if path.exists():
-            fcast = pd.read_csv(path)
+        forecast_file = Path(f"results/forecast_{model}_{result_path.stem.split('_')[-1]}.csv")
+        if forecast_file.exists():
+            fcast = pd.read_csv(forecast_file)
             forecast_df[model] = fcast["forecast"].values[:horizon]
 
     # Побудова графіка
@@ -36,18 +36,37 @@ def plot_forecast(data_path, result_path, title, date_col="date", value_col="val
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
 
-# Запуск прикладу (USD/UAH)
+    # Збереження
+    out_dir = Path("results/plots")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    safe_title = re.sub(r'[^a-zA-Z0-9_]+', '_', title.lower())
+    file_name = f"{safe_title}.png"
+    out_path = out_dir / file_name
+    plt.savefig(out_path, dpi=150)
+    print(f"📉 Графік збережено → {out_path}")
+
+
+# Побудова для Біткоіна 
 plot_forecast(
     data_path=Path("data/usd_uah_daily.csv"),
     result_path=Path("results/py_naive_usd.csv"),
-    title="Прогноз курсу USD/UAH"
+    title="Прогноз курсу USD/UAH",
+    value_col="rate"
 )
 
-# Запуск прикладу (CPI)
+# Побудова для CPI
 plot_forecast(
     data_path=Path("data/cpi_monthly.csv"),
     result_path=Path("results/py_naive_cpi.csv"),
-    title="Прогноз ІСЦ (CPI)"
+    title="Прогноз ІСЦ (CPI)",
+    value_col="value"
+)
+
+# Побудова для Brent
+plot_forecast(
+    data_path=Path("data/brent.csv"),
+    result_path=Path("results/py_naive_brent.csv"),
+    title="Прогноз ціни Brent crude oil",
+    value_col="value"
 )
