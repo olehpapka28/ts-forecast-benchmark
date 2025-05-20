@@ -1,6 +1,5 @@
 data:
-  usd_uah: "data/usd_uah_daily.csv"
-  cpi:     "data/cpi_monthly.csv"
+  salary:  "data/salary.csv"
   brent:   "data/brent.csv"
 
 experiment:

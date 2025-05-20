@@ -13,7 +13,7 @@ def run_model(name, data_path, output_path, horizon, seasonal_periods, value_col
     df["value"] = pd.to_numeric(df[value_column], errors="coerce")
     df = df.dropna()
 
-    RESULTS_DIR = Path("results")
+    RESULTS_DIR = Path("results/py")
     RESULTS_DIR.mkdir(exist_ok=True)
 
     train = df[:-horizon].copy()
@@ -42,7 +42,7 @@ def run_model(name, data_path, output_path, horizon, seasonal_periods, value_col
         "model": "naive", "rmse": rmse, "mase": mase, "smape": smape,
         "horizon": horizon, "timestamp": datetime.now(timezone.utc).isoformat()
     })
-    print(f"✅ [{name}] Naïve завершено")
+    print(f"[{name}] Naïve завершено")
 
     # ========== Seasonal Naïve ==========
     test["seasonal_naive"] = df["value"].shift(seasonal_periods).iloc[-horizon:].values
@@ -56,7 +56,7 @@ def run_model(name, data_path, output_path, horizon, seasonal_periods, value_col
         "model": "seasonal_naive", "rmse": rmse, "mase": mase, "smape": smape,
         "horizon": horizon, "timestamp": datetime.now(timezone.utc).isoformat()
     })
-    print(f"✅ [{name}] Seasonal Naïve завершено")
+    print(f"[{name}] Seasonal Naïve завершено")
 
     # ========== ETS ==========
     ets_model = ExponentialSmoothing(
@@ -78,7 +78,7 @@ def run_model(name, data_path, output_path, horizon, seasonal_periods, value_col
         "model": "ets_add_add", "rmse": rmse, "mase": mase, "smape": smape,
         "horizon": horizon, "timestamp": datetime.now(timezone.utc).isoformat()
     })
-    print(f"✅ [{name}] ETS завершено")
+    print(f"[{name}] ETS завершено")
 
     # ========== Auto-ARIMA ==========
     arima_model = auto_arima(
@@ -101,30 +101,19 @@ def run_model(name, data_path, output_path, horizon, seasonal_periods, value_col
         "model": "auto_arima", "rmse": rmse, "mase": mase, "smape": smape,
         "horizon": horizon, "timestamp": datetime.now(timezone.utc).isoformat()
     })
-    print(f"✅ [{name}] Auto-ARIMA завершено")
+    print(f"[{name}] Auto-ARIMA завершено")
 
     pd.DataFrame(results).to_csv(output_path, index=False)
-    print(f"📄 [{name}] Результати збережено у {output_path}")
+    print(f"[{name}] Результати збережено у {output_path}")
 
 
 # ========== DATASET RUNS ==========
 
-def run_usd_uah():
+def run_salary():
     run_model(
-        name="usd",
-        data_path="data/usd_uah_daily.csv",
-        output_path="results/py_naive_usd.csv",
-        horizon=365,
-        seasonal_periods=1,
-        value_column="rate",
-        seasonal=False
-    )
-
-def run_cpi():
-    run_model(
-        name="cpi",
-        data_path="data/cpi_monthly.csv",
-        output_path="results/py_naive_cpi.csv",
+        name="salary",
+        data_path="data/salary.csv",
+        output_path="results/py/py_naive_salary.csv",
         horizon=12,
         seasonal_periods=12,
         value_column="value",
@@ -135,7 +124,7 @@ def run_brent():
     run_model(
         name="brent",
         data_path="data/brent.csv",
-        output_path="results/py_naive_brent.csv",
+        output_path="results/py/py_naive_brent.csv",
         horizon=30,
         seasonal_periods=5,  # приблизно тижнева сезонність
         value_column="value",
@@ -143,6 +132,5 @@ def run_brent():
     )
 
 if __name__ == "__main__":
-    run_usd_uah()
-    run_cpi()
+    run_salary()
     run_brent()
